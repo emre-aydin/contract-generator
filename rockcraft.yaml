@@ -1,0 +1,64 @@
+name: contract-generator-worker
+title: Contract Generator Temporal Worker
+summary: Temporal worker that generates fillable contract PDFs and sends them to DocuSign
+description: |
+  An OCI rock packaging the contract-generator library as a Java Temporal worker, intended to be
+  used as the workload (oci-image) resource of the temporal-worker-k8s charm (2.0/stable).
+
+  The worker registers the ContractSigningWorkflow on the configured task queue. The workflow
+  takes a template name and parameters, renders a DocuSign-ready AcroForm PDF, and sends it to
+  DocuSign for signature, returning the envelope id.
+
+  Connection settings are read from the TEMPORAL_* environment variables the charm injects
+  (TEMPORAL_HOST, TEMPORAL_NAMESPACE, TEMPORAL_QUEUE, TEMPORAL_TLS_ROOT_CAS,
+  TEMPORAL_PROMETHEUS_PORT). DocuSign credentials are supplied via DOCUSIGN_* environment
+  variables (set through the charm's `environment` config).
+version: "0.1.0"
+license: Apache-2.0
+
+base: ubuntu@26.04
+build-base: ubuntu@26.04
+platforms:
+  amd64:
+
+# The charm manages (enables/replaces) this service; it ships disabled so the image can be
+# introspected without immediately trying to connect to a Temporal server.
+services:
+  temporal-worker:
+    override: replace
+    summary: Contract generator Temporal worker
+    command: /app/scripts/start-worker.sh
+    startup: disabled
+    environment:
+      TEMPORAL_HOST: "localhost:7233"
+      TEMPORAL_NAMESPACE: "default"
+      TEMPORAL_QUEUE: "contracts"
+
+parts:
+  worker-jar:
+    plugin: nil
+    source: .
+    build-packages:
+      - openjdk-25-jdk-headless
+      - ca-certificates
+    override-build: |
+      craftctl default
+      export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which javac))))
+      ./mvnw -B -DskipTests package
+      mkdir -p ${CRAFT_PART_INSTALL}/app
+      cp target/contract-generator-*-worker.jar \
+        ${CRAFT_PART_INSTALL}/app/contract-generator-worker.jar
+
+  runtime:
+    plugin: nil
+    stage-packages:
+      - openjdk-25-jre-headless
+      - bash
+      - coreutils
+      - ca-certificates
+
+  start-script:
+    plugin: dump
+    source: rock/
+    organize:
+      start-worker.sh: app/scripts/start-worker.sh

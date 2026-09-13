@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Temurin JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Run unit tests
+        run: ./mvnw -B --no-transfer-progress test
+
+  lint:
+    name: Error Prone
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Temurin JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      # Runs Google's Error Prone static analysis over both main and test
+      # sources via the 'errorprone' Maven profile. Error Prone's ERROR-level
+      # checks fail the build; the profile keeps the default build untouched.
+      - name: Run Error Prone
+        run: ./mvnw -B --no-transfer-progress -Perrorprone clean compile test-compile
